@@ -1,4 +1,5 @@
-from datetime import UTC, datetime, timedelta
+import hashlib
+from datetime import datetime, timedelta, timezone
 
 from jose import jwt
 from passlib.context import CryptContext
@@ -17,6 +18,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(subject: str, organization_id: int, role: str) -> str:
-    expire = datetime.now(UTC) + timedelta(minutes=settings.access_token_expire_minutes)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {"sub": subject, "org": organization_id, "role": role, "exp": expire}
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+
+
+def hash_api_key(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()

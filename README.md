@@ -1,66 +1,48 @@
-# DataVista – Plug-and-Play Data Visualization SaaS
+# LogVista – Cloud-Based Log Analytics & Monitoring Platform
 
-DataVista is a cloud-native, multi-tenant analytics platform scaffold designed for production-grade evolution. It enables organizations to ingest data, build interactive dashboards, and enforce role-based access.
+LogVista is a cloud-native, multi-tenant log analytics platform. It provides secure log ingestion APIs, real-time processing, searchable log storage, and rule-based alerting similar to Datadog/Splunk/Elastic patterns.
 
-## Tech Stack
-- **Frontend:** Next.js + React + ECharts
-- **Backend:** FastAPI + SQLAlchemy
-- **Database:** PostgreSQL
-- **Cache/Realtime Foundation:** Redis
-- **Deployment:** Docker + docker-compose
-- **CI/CD:** GitHub Actions
+## Implemented Architecture
 
-## Implemented Capabilities
-### 1) Authentication & Multi-Tenancy
-- JWT token issuance for login/register
-- Organization-scoped user registration
-- Tenant-aware data access in dataset/dashboard APIs
-- RBAC for `admin`, `analyst`, `viewer`
-- Bcrypt password hashing
+### 1) Log Ingestion Service
+- `POST /api/v1/logs/ingest` accepts JSON logs.
+- Request validation via Pydantic schema.
+- API key authentication (`X-API-Key`).
+- Built-in per-key rate limiting.
 
-### 2) Data Ingestion Layer
-- CSV/XLSX upload endpoint
-- File size validation
-- Null cleaning and preview generation
-- Basic schema inference (`dtype`, non-null counts)
+### 2) Log Processing Engine
+- Normalizes timestamps and log levels.
+- Extracts metadata and attaches tags.
+- Classifies severity (`INFO`, `WARNING`, `ERROR`).
+- Triggers alert-rule evaluation after ingestion.
 
-### 3) Data Processing Engine (Core)
-- Aggregation utility with `sum`, `avg`, `count` + `group by`
-- Extensible service layer for filtering/sorting/pagination
-- Redis included for future caching hooks
+### 3) Message Queue Layer
+- Queue abstraction (`QueueService`) between ingestion and processing.
+- Current implementation: in-memory FIFO (extensible to Kafka/RabbitMQ/Redis Streams).
 
-### 4) Dashboard Builder
-- Dashboard CRUD API foundation
-- Next.js dashboard page with widget composition placeholder
-- ECharts dynamic rendering sample
+### 4) Log Storage
+- `LogEvent` entity stores parsed logs for indexed access by org, service, level, and timestamp.
+- SQLAlchemy models are structured to be replaceable with OpenSearch/Elasticsearch for larger scale.
 
-### 5) API Design (Layered)
-- Routes (controllers): `app/api/v1`
-- Services: business logic
-- Models/Schemas for persistence and IO contracts
+### 5) Search API
+- `GET /api/v1/logs/search` with:
+  - time range (`hours`)
+  - `service`
+  - `level`
+  - keyword search (`message`)
+  - pagination (`page`, `page_size`)
 
-### 6) Database Design
-Core entities:
-- Organizations
-- Users (role + org foreign key)
-- Datasets (metadata JSON)
-- Dashboards
-- Widgets
-- Subscription plans
+### 6) Alerting System
+- `POST /api/v1/logs/alerts/rules` to create rules.
+- `GET /api/v1/logs/alerts/rules` and `GET /api/v1/logs/alerts/events`.
+- Rule format: threshold + window + channel (`dashboard`, `email`, `webhook`).
 
-### 7) DevOps
-- Dockerfiles for backend/frontend
-- `docker-compose.yml` for local full stack
-- GitHub Actions CI pipeline
+### 7) Authentication & Security
+- JWT auth for users.
+- RBAC roles: `admin`, `developer`, `analyst`, `viewer`.
+- API key authentication for ingestion clients.
 
-### 8) Advanced Readiness
-Structure prepared for:
-- WebSockets
-- Audit logs
-- Billing integration
-- Usage tracking and analytics APIs
-
-## Local Run
+## Quick Start
 ```bash
 docker compose up --build
 ```
@@ -68,17 +50,17 @@ docker compose up --build
 - Backend: `http://localhost:8000`
 - Frontend: `http://localhost:3000`
 
-## API Examples
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/login`
-- `POST /api/v1/datasets/upload`
-- `GET /api/v1/datasets`
-- `POST /api/v1/dashboards`
-- `GET /api/v1/dashboards`
+## API Flow Example
+1. Register/Login and obtain JWT.
+2. Create ingestion key (admin):
+   - `POST /api/v1/logs/bootstrap-api-key?label=prod&raw_key=<your-secret-key>`
+3. Send logs with `X-API-Key`:
+   - `POST /api/v1/logs/ingest`
+4. Query logs via JWT:
+   - `GET /api/v1/logs/search?service=auth-service&level=ERROR&hours=24`
+5. Configure alerts:
+   - `POST /api/v1/logs/alerts/rules`
 
-## Suggested Next Steps
-1. Add Alembic migrations and full indexing strategy.
-2. Persist dataset rows in a columnar/query engine.
-3. Implement OAuth (Google) and refresh tokens.
-4. Add websocket-driven widget live updates.
-5. Add Stripe billing and plan enforcement middleware.
+## Notes
+- The queue/storage layers are intentionally modular so Kafka/OpenSearch/ClickHouse can be integrated without API breakage.
+- Frontend dashboard integration can consume `/logs/search` and `/logs/alerts/events` for real-time charts and health indicators.
